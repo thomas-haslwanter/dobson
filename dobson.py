@@ -8,7 +8,7 @@ Points that still need to be done are marked with "tbd" below.
 
 author: thomas haslwanter
 date:   may 2013
-ver:    0.1:1
+ver:    0.1.2
 
 '''
 
@@ -222,29 +222,36 @@ def senility_and_WAIS():
     # grouped: Here I don't get how the grouping is supposed to be achieved, either in R or in Python
     # [tbd]
 
-def nominal_logistic_regression_tbd():
+def nominal_logistic_regression():
     '''Nominal Logistic Regression
-    chapter 8.3,  p. 155 '''
-
-    # [tbd] At this point, I don't think that nominal logistic
-    # regression can be done with the formula approach
+    chapter 8.3,  p. 155 
     
+    At this point, I nominal logistic regression can be done with the formula approach
+    '''
+    
+    # Get the data
     inFile = r'GLM_data/Table 8.1 Car preferences.xls'
     df = get_data(inFile)    
     
+    # Generate the design matrices using patsy
     pm = patsy.dmatrices('response~age+sex', data=df)
+    
+    # Change the first output, representing the endogenous data, into a vector
+    # e.g. [0,1,0] -> 1
+    # e.g. [0,0,1] -> 2
     endog_ind = np.zeros(len(pm[0]))
     for ii in range(len(pm[0])):
         endog_ind[ii] = np.where(pm[0][ii])[0]
 
+    # Since frequencies cannot be represented explicitly, multiply the entries
+    # to correspond to the correct number of occurences
     endog = np.repeat(endog_ind, df['frequency'].values.astype(int), axis=0)
     exog = np.array(np.repeat(pm[1], df['frequency'].values.astype(int), axis=0))
-    model = sm.MNLogit(endog, exog).fit()
+    
+    # Fit the model, and print the summary
+    model = sm.MNLogit(endog, exog, method='nm').fit()
     print  model.summary()
     
-    
-    # model = sm.MNLogit.from_formula('response~age+sex', data=df).fit()
-
 def ordinal_logistic_regression_tbd():
     '''Ordinal Logistic Regression
     chapter  8.4, p161 '''
@@ -285,5 +292,5 @@ def longitudinal_data_tbd():
     print df
 
 if __name__ == '__main__':
-    nominal_logistic_regression_tbd()
+    nominal_logistic_regression()
 
