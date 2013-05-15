@@ -4,11 +4,27 @@ Dobson AJ & Barnett AG: "An Introduction to Generalized Linear Models"
 3rd ed
 CRC Press(2008)
 
-Points that still need to be done are marked with "tbd" below.
+Points that still need to be done are marked with "tbd" below:
+
+- [Error 1] cloglog values in "logistic_regression" are wrong 
+
+- [Unclear] in "senility_and_WAIS" I don't understand what the "grouped response"
+  is supposed to mean
+
+- [Error 2] the signs of the paramters in "nominal_logistic_regression" are
+  incorrect
+
+- [Missing 1] "ordinal_logistic_regression" is not yet implemented in statsmodels
+
+- [Error 3] the standard errors in "poisson_regression" are wrong
+
+- [Missing 2] Cox proportional hazards are not yet implemented in statsmodels
+
+- [Missing 3] Repeated measures models are not yet implemented in statsmodels
 
 author: thomas haslwanter
 date:   may 2013
-ver:    0.1.2
+ver:    0.2
 
 '''
 
@@ -72,9 +88,16 @@ def multiple_linear_regression():
     glm = sm.GLM.from_formula('carbohydrate ~ age + weight + protein',
             family=sm.families.Gaussian(), data=df).fit()
     print 'Same model, calculated with GLM'
-    # [tbd] The confidence intervals are different than those from OLS,
-    # despite the fact that the parameters and standard errors are the
-    # same!
+    ''' The confidence intervals are different than those from OLS.
+    The reason (from Nathaniel Smith):
+    OLS uses a method that gives exact results, but only works in the special
+    case where all the usual OLS criteria apply - iid Gaussian noise etc. GLM
+    instead uses an approximate method which is correct asymptotically but may
+    be off for small samples; the tradeoff you get in return is that this method
+    works the same way for all GLM models, including those with non-Gaussian
+    error terms and non-trivial link functions. So that's why they're different.
+    '''
+
     print glm.summary()
     
     # ... and for model 1
@@ -226,7 +249,10 @@ def nominal_logistic_regression():
     '''Nominal Logistic Regression
     chapter 8.3,  p. 155 
     
-    At this point, I nominal logistic regression can be done with the formula approach
+    At this point, I nominal logistic regression can be done with the formula approach.
+    
+    Regarding the output, note that R produces log(pi2/pi1) and log(pi3/pi1), while
+    statsmodels produces log(pi2/pi1) and log(pi3/pi2) 
     '''
     
     # Get the data
@@ -246,20 +272,30 @@ def nominal_logistic_regression():
     # Since frequencies cannot be represented explicitly, multiply the entries
     # to correspond to the correct number of occurences
     endog = np.repeat(endog_ind, df['frequency'].values.astype(int), axis=0)
+    # equivalent to
+    # endog = np.repeat(df['response'], df['frequency'].values.astype(int), axis=0) 
+
     exog = np.array(np.repeat(pm[1], df['frequency'].values.astype(int), axis=0))
     
     # Fit the model, and print the summary
     model = sm.MNLogit(endog, exog, method='nm').fit()
     print  model.summary()
+
+    #[tbd] some of the model parameters have the wrong sign - all signs
+    # are the same
     
 def ordinal_logistic_regression_tbd():
+    
     '''Ordinal Logistic Regression
-    chapter  8.4, p161 '''
+    chapter  8.4, p161
+    This function is not implemented in statsmodels yet. One solution can be found at
+    http://fabianp.net/blog/2013/logistic-ordinal-regression/
+    '''
     
     inFile = r'GLM_data/Table 8.1 Car preferences.xls'
     df = get_data(inFile)    
 
-def poisson_regression_tbd():
+def poisson_regression():
     '''Poisson Regression
     chapter 9.2, p.170 & 171 '''
     
@@ -267,17 +303,66 @@ def poisson_regression_tbd():
     df = get_data(inFile)    
     print df
 
-def log_linear_models_tbd():
+    # Generate the required variables
+    df['smoke'] = np.zeros(len(df))
+    df['smoke'][df['smoking']=='smoker']=1
+
+    df['agecat'] = np.array([1,2,3,4,5,1,2,3,4,5])
+    df['agesq'] = df['agecat']**2
+
+    df['smkage'] = df['agecat']
+    df['smkage'][df['smoking']=='non-smoker']=0
+
+    df['death_py'] = df['deaths']/df['person-years']
+
+    model = sm.GLM.from_formula('death_py~agecat+agesq+smoke+smkage', family=sm.families.Poisson(), data=df).fit()
+    print model.summary()
+
+    #[tbd]: standard errors are wrong
+
+
+def log_linear_models():
     '''Log-linear models
     chapter 9.7, p 180 & 182 '''
 
-    inFile = r'GLM_data/Table 9.7 Ulcer and aspirin use.xls'
+    # Malignant melanoma, p 180 --------------------------------
+    inFile = r'GLM_data/Table 9.4 Malignant melanoma.xls'
     df = get_data(inFile)    
-    print df
+
+    # Minimal model
+    model_min = sm.GLM.from_formula('frequency~1', family = sm.families.Poisson(), data=df).fit()
+    print 'Malignant melanoma'
+    print model_min.fittedvalues[0]
+
+    # Additive model
+    model_add = sm.GLM.from_formula('frequency~site+type', family = sm.families.Poisson(), data=df).fit()
+    print model_add.fittedvalues[0]
+
+    # Saturated model
+    # model_sat = sm.GLM.from_formula('frequency~site*type', family = sm.families.Poisson(), data=df).fit()
+    #
+    # The saturated model gives a perfect fit, and the fitted data are equal to
+    # the original data. Statsmodels indicates a "PerfectSeparationError"
+
+    # Ulcer and aspirin, p. 182 ------------------------------------- 
+    inFile = r'GLM_data/Table 9.7 Ulcer and aspirin use.xls'
+    df = get_data(inFile)
+    df.columns = ['GD', 'CC', 'AP', 'freq']
+
+    model1 = sm.GLM.from_formula('freq~GD+CC+GD*CC', family = sm.families.Poisson(), data=df).fit()
+    model2 = sm.GLM.from_formula('freq~GD+CC+GD*CC + AP', family = sm.families.Poisson(), data=df).fit()
+    model3 = sm.GLM.from_formula('freq~GD+CC+GD*CC + AP + AP*CC', family = sm.families.Poisson(), data=df).fit()
+    model4 = sm.GLM.from_formula('freq~GD+CC+GD*CC + AP + AP*CC + AP*GD', family = sm.families.Poisson(), data=df).fit()
+    
+    print 'Ulcer and aspirin'
+    print model4.fittedvalues
+
 
 def remission_times_tbd():
     '''Survival analysis / Remission times
-    chapter 10.7, p. 201'''
+    chapter 10.7, p. 201
+    These models, also known as "Cox proportional hazards model",
+    are currently under development but not yet available in statsmodels.'''
 
     inFile = r'GLM_data/Table 10.1 Remission times.xls'
     df = get_data(inFile)    
@@ -285,12 +370,14 @@ def remission_times_tbd():
 
 def longitudinal_data_tbd():
     '''Stroke example
-    chapter 11.6, p. 222 '''
+    chapter 11.6, p. 222
+    Clustered and Longitudinal Data are described by repeated measures models.
+    These are under development, but not yet available in statsmodels.'''
 
     inFile = r'GLM_data/Table 11.1 Recovery from stroke.xls'
     df = get_data(inFile)    
     print df
 
 if __name__ == '__main__':
-    nominal_logistic_regression()
+    log_linear_models()
 
