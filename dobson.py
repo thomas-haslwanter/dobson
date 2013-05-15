@@ -6,17 +6,13 @@ CRC Press(2008)
 
 Points that still need to be done are marked with "tbd" below:
 
-- [Error 1] cloglog values in "logistic_regression" are wrong 
+- [Unclear] Clarify the exact definition of "loglog" and "cloglog" in the differnent
+  languages.
 
 - [Unclear] in "senility_and_WAIS" I don't understand what the "grouped response"
   is supposed to mean
 
-- [Error 2] the signs of the paramters in "nominal_logistic_regression" are
-  incorrect
-
 - [Missing 1] "ordinal_logistic_regression" is not yet implemented in statsmodels
-
-- [Error 3] the standard errors in "poisson_regression" are wrong
 
 - [Missing 2] Cox proportional hazards are not yet implemented in statsmodels
 
@@ -24,7 +20,7 @@ Points that still need to be done are marked with "tbd" below:
 
 author: thomas haslwanter
 date:   may 2013
-ver:    0.2
+ver:    0.21
 
 '''
 
@@ -35,6 +31,8 @@ import statsmodels.api as sm
 import patsy
 
 from statsmodels.stats.api import anova_lm
+from statsmodels.formula.api import glm, ols
+from statsmodels.genmod.families import Poisson, Binomial, Gaussian, links
 
 # for data import
 import urllib2
@@ -48,8 +46,7 @@ def get_data(inFile):
     url = 'http://cdn.crcpress.com/downloads/C9500/GLM_data.zip'
     GLM_archive = urllib2.urlopen(url).read()
     
-    # extract the requested file from the archive, as a pandas XLS-file
-    
+    # extract the requested file from the archive
     zipdata = StringIO()
     zipdata.write(GLM_archive)
     myzipfile = zipfile.ZipFile(zipdata)
@@ -68,7 +65,7 @@ def regression():
     df = get_data(inFile)
     
     # do the fit
-    p = sm.GLM.from_formula('y~x', family=sm.families.Poisson(sm.families.links.identity), data=df)
+    p = glm('y~x', family=Poisson(links.identity), data=df)
     print p.fit().summary()    
 
 def multiple_linear_regression():
@@ -80,13 +77,13 @@ def multiple_linear_regression():
     df = get_data(inFile)
     
     # do the fit, for the original model ...
-    model = sm.OLS.from_formula('carbohydrate ~ age + weight + protein', data=df).fit()
+    model = ols('carbohydrate ~ age + weight + protein', data=df).fit()
     print model.summary()
     print anova_lm(model)
 
     # as GLM
-    glm = sm.GLM.from_formula('carbohydrate ~ age + weight + protein',
-            family=sm.families.Gaussian(), data=df).fit()
+    glm = glm('carbohydrate ~ age + weight + protein',
+            family=Gaussian(), data=df).fit()
     print 'Same model, calculated with GLM'
     ''' The confidence intervals are different than those from OLS.
     The reason (from Nathaniel Smith):
@@ -101,7 +98,7 @@ def multiple_linear_regression():
     print glm.summary()
     
     # ... and for model 1
-    model1 = sm.OLS.from_formula('carbohydrate ~ weight + protein', data=df).fit()
+    model1 = ols('carbohydrate ~ weight + protein', data=df).fit()
     print model1.summary()
     print anova_lm(model1)    
 
@@ -116,17 +113,17 @@ def anova():
     df = get_data(inFile)
     
     # fit the model (p 109)
-    glm = sm.GLM.from_formula('weight~group', family=sm.families.Gaussian(), data=df)
+    glm = glm('weight~group', family=Gaussian(), data=df)
     print glm.fit().summary()        
     
     print '-'*65
     print 'OLS'
-    model = sm.OLS.from_formula('weight~group', data=df)
+    model = ols('weight~group', data=df)
     print model.fit().summary()
     print anova_lm(model.fit())            
     
     # The model corresponding to the null hypothesis of no treatment effect is
-    model0 = sm.OLS.from_formula('weight~1', data=df)
+    model0 = ols('weight~1', data=df)
     
     # Get the data for the two-factor ANOVA (p 113)
     inFile = r'GLM_data/Table 6.9 Two-factor data.xls' 
@@ -136,14 +133,14 @@ def anova():
     df.columns = ['A','B', 'data']
     
     # two-factor anova, with interactions
-    ols_int = sm.OLS.from_formula('data~A*B', data=df)
+    ols_int = ols('data~A*B', data=df)
     anova_lm(ols_int.fit())
     
     # The python commands for the other four models are
-    ols_add = sm.OLS.from_formula('data~A+B', data=df)
-    ols_A = sm.OLS.from_formula('data~A', data=df)    
-    ols_B = sm.OLS.from_formula('data~B', data=df)    
-    ols_mean = sm.OLS.from_formula('data~1', data=df)    
+    ols_add = ols('data~A+B', data=df)
+    ols_A = ols('data~A', data=df)    
+    ols_B = ols('data~B', data=df)    
+    ols_mean = ols('data~1', data=df)    
 
 def ancova():
     ''' ANCOVA
@@ -154,14 +151,16 @@ def ancova():
     df = get_data(inFile)
     
     # fit the model
-    model = sm.OLS.from_formula('y~x+method', data=df).fit()
+    model = ols('y~x+method', data=df).fit()
     print anova_lm(model)
     print model.summary()    
 
 def logistic_regression():
     '''Logistic regression example
     chapter 7.3, p 130
-    [tbd]: cloglog values are incorrect
+    [tbd]: the cloglog values are inconsistent with those mentioned in the book.
+    This is probably due to the specific definitions of "loglog" and "cloglog"
+    in the respective languages.
     '''
     
     inFile = r'GLM_data/Table 7.2 Beetle mortality.xls'
@@ -175,13 +174,13 @@ def logistic_regression():
     df['tested'] = df['n']
     df['killed'] = df['y']
     df['survived'] = df['tested'] - df['killed']
-    model = sm.GLM.from_formula('survived + killed ~ x', data=df, family=sm.families.Binomial()).fit()
+    model = glm('survived + killed ~ x', data=df, family=Binomial()).fit()
     print model.summary()
     
     print '-'*65
     print 'Equivalent solution:'
     
-    model = sm.GLM.from_formula('I(n - y) + y ~ x', data=df, family=sm.families.Binomial()).fit()
+    model = glm('I(n - y) + y ~ x', data=df, family=Binomial()).fit()
     print model.summary()    
     
     # The fitted number of survivors can be obtained by
@@ -190,14 +189,14 @@ def logistic_regression():
     print fits
     
     # The fits for other link functions are:
-    model_probit = sm.GLM.from_formula('I(n - y) + y ~ x', data=df, family=sm.families.Binomial(sm.families.links.probit)).fit()
+    model_probit = glm('I(n - y) + y ~ x', data=df, family=Binomial(links.probit)).fit()
     print model_probit.summary()
     
     fits_probit = df['n']*(1-model_probit.fittedvalues)
     print 'Fits Probit:'
     print fits_probit
     
-    model_cll = sm.GLM.from_formula('I(n - y) + y ~ x', data=df, family=sm.families.Binomial(sm.families.links.cloglog)).fit()
+    model_cll = glm('I(n - y) + y ~ x', data=df, family=Binomial(links.cloglog)).fit()
     print model_cll.summary()
     fits_cll = df['n']*(1-model_cll.fittedvalues)
     print 'Fits Extreme Value:'
@@ -217,15 +216,15 @@ def general_logistic_regression():
     df['x'] = np.log(df['centrifuge'])
     
     # Model 1
-    model1 = sm.GLM.from_formula('n_y + y ~ newstor*x', data=df, family=sm.families.Binomial()).fit()
+    model1 = glm('n_y + y ~ newstor*x', data=df, family=Binomial()).fit()
     print model1.summary()
     
     # Model 2
-    model2 = sm.GLM.from_formula('n_y + y ~ newstor+x', data=df, family=sm.families.Binomial()).fit()
+    model2 = glm('n_y + y ~ newstor+x', data=df, family=Binomial()).fit()
     print model2.summary()
     
     # Model 3
-    model3 = sm.GLM.from_formula('n_y + y ~ x', data=df, family=sm.families.Binomial()).fit()
+    model3 = glm('n_y + y ~ x', data=df, family=Binomial()).fit()
     print model3 .summary()    
 
 def senility_and_WAIS():
@@ -238,7 +237,7 @@ def senility_and_WAIS():
     df = get_data(inFile)
     
     # ungrouped
-    model = sm.GLM.from_formula('s ~ x', data=df, family=sm.families.Binomial()).fit()
+    model = glm('s ~ x', data=df, family=Binomial()).fit()
     print model.summary()    
     
     # Hosmer-Lemeshow
@@ -249,7 +248,7 @@ def nominal_logistic_regression():
     '''Nominal Logistic Regression
     chapter 8.3,  p. 155 
     
-    At this point, I nominal logistic regression can be done with the formula approach.
+    At this point, nominal logistic regression cannot be done with the formula approach.
     
     Regarding the output, note that R produces log(pi2/pi1) and log(pi3/pi1), while
     statsmodels produces log(pi2/pi1) and log(pi3/pi2) 
@@ -258,32 +257,26 @@ def nominal_logistic_regression():
     # Get the data
     inFile = r'GLM_data/Table 8.1 Car preferences.xls'
     df = get_data(inFile)    
+
+    # to make sure that "women" and "no/little" are the reference,
+    # adjust them such that they come first alphabetically
+    df['response'][df['response'] == 'no/little'] = '_no/little'
+    df['sex'][df['sex'] == 'women'] = '_women'
+    print df
+    
     
     # Generate the design matrices using patsy
-    pm = patsy.dmatrices('response~age+sex', data=df)
+    pm = patsy.dmatrices('response~sex+age', data=df)
     
-    # Change the first output, representing the endogenous data, into a vector
-    # e.g. [0,1,0] -> 1
-    # e.g. [0,0,1] -> 2
-    endog_ind = np.zeros(len(pm[0]))
-    for ii in range(len(pm[0])):
-        endog_ind[ii] = np.where(pm[0][ii])[0]
-
-    # Since frequencies cannot be represented explicitly, multiply the entries
-    # to correspond to the correct number of occurences
-    endog = np.repeat(endog_ind, df['frequency'].values.astype(int), axis=0)
-    # equivalent to
-    # endog = np.repeat(df['response'], df['frequency'].values.astype(int), axis=0) 
-
+    # Generate the endog and exog matrices
+    endog = np.repeat(np.array(df['response']), df['frequency'].values.astype(int), axis=0)
     exog = np.array(np.repeat(pm[1], df['frequency'].values.astype(int), axis=0))
-    
+    exog = pd.DataFrame(exog, columns=pm[1].design_info.column_names) 
+
     # Fit the model, and print the summary
     model = sm.MNLogit(endog, exog, method='nm').fit()
     print  model.summary()
 
-    #[tbd] some of the model parameters have the wrong sign - all signs
-    # are the same
-    
 def ordinal_logistic_regression_tbd():
     
     '''Ordinal Logistic Regression
@@ -313,13 +306,10 @@ def poisson_regression():
     df['smkage'] = df['agecat']
     df['smkage'][df['smoking']=='non-smoker']=0
 
-    df['death_py'] = df['deaths']/df['person-years']
-
-    model = sm.GLM.from_formula('death_py~agecat+agesq+smoke+smkage', family=sm.families.Poisson(), data=df).fit()
+    model = glm('deaths~agecat+agesq+smoke+smkage',
+            family=Poisson(), data=df,
+            exposure=df["person-years"]).fit()
     print model.summary()
-
-    #[tbd]: standard errors are wrong
-
 
 def log_linear_models():
     '''Log-linear models
@@ -330,16 +320,16 @@ def log_linear_models():
     df = get_data(inFile)    
 
     # Minimal model
-    model_min = sm.GLM.from_formula('frequency~1', family = sm.families.Poisson(), data=df).fit()
+    model_min = glm('frequency~1', family = Poisson(), data=df).fit()
     print 'Malignant melanoma'
     print model_min.fittedvalues[0]
 
     # Additive model
-    model_add = sm.GLM.from_formula('frequency~site+type', family = sm.families.Poisson(), data=df).fit()
+    model_add = glm('frequency~site+type', family = Poisson(), data=df).fit()
     print model_add.fittedvalues[0]
 
     # Saturated model
-    # model_sat = sm.GLM.from_formula('frequency~site*type', family = sm.families.Poisson(), data=df).fit()
+    # model_sat = glm('frequency~site*type', family = Poisson(), data=df).fit()
     #
     # The saturated model gives a perfect fit, and the fitted data are equal to
     # the original data. Statsmodels indicates a "PerfectSeparationError"
@@ -349,10 +339,10 @@ def log_linear_models():
     df = get_data(inFile)
     df.columns = ['GD', 'CC', 'AP', 'freq']
 
-    model1 = sm.GLM.from_formula('freq~GD+CC+GD*CC', family = sm.families.Poisson(), data=df).fit()
-    model2 = sm.GLM.from_formula('freq~GD+CC+GD*CC + AP', family = sm.families.Poisson(), data=df).fit()
-    model3 = sm.GLM.from_formula('freq~GD+CC+GD*CC + AP + AP*CC', family = sm.families.Poisson(), data=df).fit()
-    model4 = sm.GLM.from_formula('freq~GD+CC+GD*CC + AP + AP*CC + AP*GD', family = sm.families.Poisson(), data=df).fit()
+    model1 = glm('freq~GD+CC+GD*CC', family = Poisson(), data=df).fit()
+    model2 = glm('freq~GD+CC+GD*CC + AP', family = Poisson(), data=df).fit()
+    model3 = glm('freq~GD+CC+GD*CC + AP + AP*CC', family = Poisson(), data=df).fit()
+    model4 = glm('freq~GD+CC+GD*CC + AP + AP*CC + AP*GD', family = Poisson(), data=df).fit()
     
     print 'Ulcer and aspirin'
     print model4.fittedvalues
@@ -379,5 +369,5 @@ def longitudinal_data_tbd():
     print df
 
 if __name__ == '__main__':
-    log_linear_models()
+    nominal_logistic_regression()
 
