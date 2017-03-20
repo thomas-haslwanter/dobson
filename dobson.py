@@ -18,43 +18,69 @@ Points that still need to be done are marked with "tbd" below:
 
 - [Missing 3] Repeated measures models are not yet implemented in statsmodels
 
+Dependencies
+------------
+python3, numpy, pandas, patsy, statsmodels
+
 author: thomas haslwanter
-date:   may 2013
-ver:    0.21
+date:   March 2017
+ver:    0.22
 
 '''
 
 # Standard libraries
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 import patsy
 
-from statsmodels.stats.api import anova_lm
-from statsmodels.formula.api import glm, ols
-from statsmodels.genmod.families import Poisson, Binomial, Gaussian, links
+# The required modules from "statsmodels"
+import statsmodels.api as sm
+import statsmodels.stats.api as sm_stats
+import statsmodels.formula.api as smf
+import statsmodels.genmod.families as sm_families
 
 # for data import
-import urllib2
+import urllib
 import zipfile
-from StringIO import StringIO
+import io
 
 def get_data(inFile):
-    '''Get data from original Excel-file'''
-    
+    '''Extract data from a zipped-archive'''
+
     # get the zip-archive
     url = 'http://cdn.crcpress.com/downloads/C9500/GLM_data.zip'
-    GLM_archive = urllib2.urlopen(url).read()
-    
-    # extract the requested file from the archive
-    zipdata = StringIO()
+    GLM_archive = urllib.request.urlopen(url).read()
+
+    # make the archive available as a byte-stream
+    zipdata = io.BytesIO()
     zipdata.write(GLM_archive)
+
+    # extract the requested file from the archive, as a pandas XLS-file
     myzipfile = zipfile.ZipFile(zipdata)
     xlsfile = myzipfile.open(inFile)
+
+    # read the xls-file into Python, using Pandas, and return the extracted data
     xls = pd.ExcelFile(xlsfile)
-    df = xls.parse('Sheet1', skiprows=2)    
-    
+    df  = xls.parse('Sheet1', skiprows=2)
+
     return df
+
+#def get_data(inFile):
+    #'''Get data from original Excel-file'''
+    
+    ## get the zip-archive
+    #url = 'http://cdn.crcpress.com/downloads/C9500/GLM_data.zip'
+    #GLM_archive = urllib.request.urlopen(url).read()
+    
+    ## extract the requested file from the archive
+    #zipdata = StringIO()
+    #zipdata.write(GLM_archive)
+    #myzipfile = zipfile.ZipFile(zipdata)
+    #xlsfile = myzipfile.open(inFile)
+    #xls = pd.ExcelFile(xlsfile)
+    #df = xls.parse('Sheet1', skiprows=2)    
+    
+    #return df
 
 def regression():
     '''Poisson regression example
@@ -65,8 +91,8 @@ def regression():
     df = get_data(inFile)
     
     # do the fit
-    p = glm('y~x', family=Poisson(links.identity), data=df)
-    print p.fit().summary()    
+    p = smf.glm('y~x', family=sm_families.Poisson(sm_families.links.identity), data=df)
+    print(p.fit().summary())
 
 def multiple_linear_regression():
     '''Multiple linear regression
@@ -77,14 +103,14 @@ def multiple_linear_regression():
     df = get_data(inFile)
     
     # do the fit, for the original model ...
-    model = ols('carbohydrate ~ age + weight + protein', data=df).fit()
-    print model.summary()
-    print anova_lm(model)
+    model = smf.ols('carbohydrate ~ age + weight + protein', data=df).fit()
+    print(model.summary())
+    print(sm_stats.anova_lm(model))
 
     # as GLM
-    glm = glm('carbohydrate ~ age + weight + protein',
-            family=Gaussian(), data=df).fit()
-    print 'Same model, calculated with GLM'
+    glm = smf.glm('carbohydrate ~ age + weight + protein',
+            family=sm_families.Gaussian(), data=df).fit()
+    print('Same model, calculated with GLM')
     ''' The confidence intervals are different than those from OLS.
     The reason (from Nathaniel Smith):
     OLS uses a method that gives exact results, but only works in the special
@@ -95,12 +121,12 @@ def multiple_linear_regression():
     error terms and non-trivial link functions. So that's why they're different.
     '''
 
-    print glm.summary()
+    print(glm.summary())
     
     # ... and for model 1
-    model1 = ols('carbohydrate ~ weight + protein', data=df).fit()
-    print model1.summary()
-    print anova_lm(model1)    
+    model1 = smf.ols('carbohydrate ~ weight + protein', data=df).fit()
+    print(model1.summary())
+    print(sm_stats.anova_lm(model1))
 
 def anova():
     '''ANOVA
@@ -113,17 +139,17 @@ def anova():
     df = get_data(inFile)
     
     # fit the model (p 109)
-    glm = glm('weight~group', family=Gaussian(), data=df)
-    print glm.fit().summary()        
+    glm = smf.glm('weight~group', family=sm_families.Gaussian(), data=df)
+    print(glm.fit().summary())
     
-    print '-'*65
-    print 'OLS'
-    model = ols('weight~group', data=df)
-    print model.fit().summary()
-    print anova_lm(model.fit())            
+    print('-'*65)
+    print('OLS')
+    model = smf.ols('weight~group', data=df)
+    print(model.fit().summary())
+    print(sm_stats.anova_lm(model.fit()))
     
     # The model corresponding to the null hypothesis of no treatment effect is
-    model0 = ols('weight~1', data=df)
+    model0 = smf.ols('weight~1', data=df)
     
     # Get the data for the two-factor ANOVA (p 113)
     inFile = r'GLM_data/Table 6.9 Two-factor data.xls' 
@@ -133,14 +159,14 @@ def anova():
     df.columns = ['A','B', 'data']
     
     # two-factor anova, with interactions
-    ols_int = ols('data~A*B', data=df)
-    anova_lm(ols_int.fit())
+    ols_int = smf.ols('data~A*B', data=df)
+    sm_stats.anova_lm(ols_int.fit())
     
     # The python commands for the other four models are
-    ols_add = ols('data~A+B', data=df)
-    ols_A = ols('data~A', data=df)    
-    ols_B = ols('data~B', data=df)    
-    ols_mean = ols('data~1', data=df)    
+    ols_add = smf.ols('data~A+B', data=df)
+    ols_A = smf.ols('data~A', data=df)    
+    ols_B = smf.ols('data~B', data=df)    
+    ols_mean = smf.ols('data~1', data=df)    
 
 def ancova():
     ''' ANCOVA
@@ -151,9 +177,9 @@ def ancova():
     df = get_data(inFile)
     
     # fit the model
-    model = ols('y~x+method', data=df).fit()
-    print anova_lm(model)
-    print model.summary()    
+    model = smf.ols('y~x+method', data=df).fit()
+    print(sm_stats.anova_lm(model))
+    print(model.summary())
 
 def logistic_regression():
     '''Logistic regression example
@@ -174,33 +200,33 @@ def logistic_regression():
     df['tested'] = df['n']
     df['killed'] = df['y']
     df['survived'] = df['tested'] - df['killed']
-    model = glm('survived + killed ~ x', data=df, family=Binomial()).fit()
-    print model.summary()
+    model = smf.glm('survived + killed ~ x', data=df, family=sm_families.Binomial()).fit()
+    print(model.summary())
     
-    print '-'*65
-    print 'Equivalent solution:'
+    print('-'*65)
+    print('Equivalent solution:')
     
-    model = glm('I(n - y) + y ~ x', data=df, family=Binomial()).fit()
-    print model.summary()    
+    model = smf.glm('I(n - y) + y ~ x', data=df, family=sm_families.Binomial()).fit()
+    print(model.summary())
     
     # The fitted number of survivors can be obtained by
     fits = df['n']*(1-model.fittedvalues)
-    print 'Fits Logit:'
-    print fits
+    print('Fits Logit:')
+    print(fits)
     
     # The fits for other link functions are:
-    model_probit = glm('I(n - y) + y ~ x', data=df, family=Binomial(links.probit)).fit()
-    print model_probit.summary()
+    model_probit = smf.glm('I(n - y) + y ~ x', data=df, family=sm_families.Binomial(sm_families.links.probit)).fit()
+    print(model_probit.summary())
     
     fits_probit = df['n']*(1-model_probit.fittedvalues)
-    print 'Fits Probit:'
-    print fits_probit
+    print('Fits Probit:')
+    print(fits_probit)
     
-    model_cll = glm('I(n - y) + y ~ x', data=df, family=Binomial(links.cloglog)).fit()
-    print model_cll.summary()
+    model_cll = smf.glm('I(n - y) + y ~ x', data=df, family=sm_families.Binomial(sm_families.links.cloglog)).fit()
+    print(model_cll.summary())
     fits_cll = df['n']*(1-model_cll.fittedvalues)
-    print 'Fits Extreme Value:'
-    print fits_cll
+    print('Fits Extreme Value:')
+    print(fits_cll)
 
 def general_logistic_regression():
     '''Example General Logistic Recression,
@@ -216,16 +242,16 @@ def general_logistic_regression():
     df['x'] = np.log(df['centrifuge'])
     
     # Model 1
-    model1 = glm('n_y + y ~ newstor*x', data=df, family=Binomial()).fit()
-    print model1.summary()
+    model1 = smf.glm('n_y + y ~ newstor*x', data=df, family=sm_families.Binomial()).fit()
+    print(model1.summary())
     
     # Model 2
-    model2 = glm('n_y + y ~ newstor+x', data=df, family=Binomial()).fit()
-    print model2.summary()
+    model2 = smf.glm('n_y + y ~ newstor+x', data=df, family=sm_families.Binomial()).fit()
+    print(model2.summary())
     
     # Model 3
-    model3 = glm('n_y + y ~ x', data=df, family=Binomial()).fit()
-    print model3 .summary()    
+    model3 = smf.glm('n_y + y ~ x', data=df, family=sm_families.Binomial()).fit()
+    print(model3 .summary())
 
 def senility_and_WAIS():
     '''Another example of logistic regression.
@@ -237,8 +263,8 @@ def senility_and_WAIS():
     df = get_data(inFile)
     
     # ungrouped
-    model = glm('s ~ x', data=df, family=Binomial()).fit()
-    print model.summary()    
+    model = smf.glm('s ~ x', data=df, family=sm_families.Binomial()).fit()
+    print(model.summary())
     
     # Hosmer-Lemeshow
     # grouped: Here I don't get how the grouping is supposed to be achieved, either in R or in Python
@@ -256,13 +282,13 @@ def nominal_logistic_regression():
     
     # Get the data
     inFile = r'GLM_data/Table 8.1 Car preferences.xls'
-    df = get_data(inFile)    
+    df = get_data(inFile)
 
     # to make sure that "women" and "no/little" are the reference,
     # adjust them such that they come first alphabetically
     df['response'][df['response'] == 'no/little'] = '_no/little'
     df['sex'][df['sex'] == 'women'] = '_women'
-    print df
+    print(df)
     
     
     # Generate the design matrices using patsy
@@ -275,7 +301,7 @@ def nominal_logistic_regression():
 
     # Fit the model, and print the summary
     model = sm.MNLogit(endog, exog, method='nm').fit()
-    print  model.summary()
+    print( model.summary())
 
 def ordinal_logistic_regression_tbd():
     
@@ -286,15 +312,15 @@ def ordinal_logistic_regression_tbd():
     '''
     
     inFile = r'GLM_data/Table 8.1 Car preferences.xls'
-    df = get_data(inFile)    
+    df = get_data(inFile)
 
 def poisson_regression():
     '''Poisson Regression
     chapter 9.2, p.170 & 171 '''
     
     inFile = r"GLM_data/Table 9.1 British doctors' smoking and coronary death.xls"
-    df = get_data(inFile)    
-    print df
+    df = get_data(inFile)
+    print(df)
 
     # Generate the required variables
     df['smoke'] = np.zeros(len(df))
@@ -306,10 +332,10 @@ def poisson_regression():
     df['smkage'] = df['agecat']
     df['smkage'][df['smoking']=='non-smoker']=0
 
-    model = glm('deaths~agecat+agesq+smoke+smkage',
-            family=Poisson(), data=df,
+    model = smf.glm('deaths~agecat+agesq+smoke+smkage',
+            family=sm_families.Poisson(), data=df,
             exposure=df["person-years"]).fit()
-    print model.summary()
+    print(model.summary())
 
 def log_linear_models():
     '''Log-linear models
@@ -317,19 +343,19 @@ def log_linear_models():
 
     # Malignant melanoma, p 180 --------------------------------
     inFile = r'GLM_data/Table 9.4 Malignant melanoma.xls'
-    df = get_data(inFile)    
+    df = get_data(inFile)
 
     # Minimal model
-    model_min = glm('frequency~1', family = Poisson(), data=df).fit()
-    print 'Malignant melanoma'
-    print model_min.fittedvalues[0]
+    model_min = smf.glm('frequency~1', family = sm_families.Poisson(), data=df).fit()
+    print('Malignant melanoma')
+    print(model_min.fittedvalues[0])
 
     # Additive model
-    model_add = glm('frequency~site+type', family = Poisson(), data=df).fit()
-    print model_add.fittedvalues[0]
+    model_add = smf.glm('frequency~site+type', family = sm_families.Poisson(), data=df).fit()
+    print(model_add.fittedvalues[0])
 
     # Saturated model
-    # model_sat = glm('frequency~site*type', family = Poisson(), data=df).fit()
+    # model_sat = smf.glm('frequency~site*type', family = sm_families.Poisson(), data=df).fit()
     #
     # The saturated model gives a perfect fit, and the fitted data are equal to
     # the original data. Statsmodels indicates a "PerfectSeparationError"
@@ -339,13 +365,13 @@ def log_linear_models():
     df = get_data(inFile)
     df.columns = ['GD', 'CC', 'AP', 'freq']
 
-    model1 = glm('freq~GD+CC+GD*CC', family = Poisson(), data=df).fit()
-    model2 = glm('freq~GD+CC+GD*CC + AP', family = Poisson(), data=df).fit()
-    model3 = glm('freq~GD+CC+GD*CC + AP + AP*CC', family = Poisson(), data=df).fit()
-    model4 = glm('freq~GD+CC+GD*CC + AP + AP*CC + AP*GD', family = Poisson(), data=df).fit()
+    model1 = smf.glm('freq~GD+CC+GD*CC', family = sm_families.Poisson(), data=df).fit()
+    model2 = smf.glm('freq~GD+CC+GD*CC + AP', family = sm_families.Poisson(), data=df).fit()
+    model3 = smf.glm('freq~GD+CC+GD*CC + AP + AP*CC', family = sm_families.Poisson(), data=df).fit()
+    model4 = smf.glm('freq~GD+CC+GD*CC + AP + AP*CC + AP*GD', family = sm_families.Poisson(), data=df).fit()
     
-    print 'Ulcer and aspirin'
-    print model4.fittedvalues
+    print('Ulcer and aspirin')
+    print(model4.fittedvalues)
 
 
 def remission_times_tbd():
@@ -355,8 +381,8 @@ def remission_times_tbd():
     are currently under development but not yet available in statsmodels.'''
 
     inFile = r'GLM_data/Table 10.1 Remission times.xls'
-    df = get_data(inFile)    
-    print df
+    df = get_data(inFile)
+    print(df)
 
 def longitudinal_data_tbd():
     '''Stroke example
@@ -365,9 +391,19 @@ def longitudinal_data_tbd():
     These are under development, but not yet available in statsmodels.'''
 
     inFile = r'GLM_data/Table 11.1 Recovery from stroke.xls'
-    df = get_data(inFile)    
-    print df
+    df = get_data(inFile)
+    print(df)
 
 if __name__ == '__main__':
+    # Now run all models, just to check that they don't crash
+    ancova()
+    anova()
+    general_logistic_regression()
+    logistic_regression()
+    log_linear_models()
+    multiple_linear_regression()
     nominal_logistic_regression()
+    poisson_regression()
+    regression()
+    senility_and_WAIS()
 
